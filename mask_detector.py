@@ -15,3 +15,34 @@ import os
 # Path to your dataset folder (CHANGE THIS to your actual path)
 DIRECTORY = "/content/DATASET"
 CATEGORIES = ["with_mask", "without_mask"]
+
+
+INIT_LR = 1e-4  # Learning Rate (how fast the AI learns)
+EPOCHS = 10     # How many times to pass through the whole dataset
+BS = 32         # Batch size (process 32 images at a time)
+
+print("[INFO] Loading and preprocessing images...")
+
+# --- 2. DATA LOADING & AUGMENTATION ---
+# This tool loads images and creates "fake" variations (zooms, rotations)
+# to make the model smarter.
+train_datagen = ImageDataGenerator(
+    rotation_range=20,
+    zoom_range=0.15,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.15,
+    horizontal_flip=True,
+    fill_mode="nearest",
+    preprocessing_function=preprocess_input, # Vital for MobileNetV2
+    validation_split=0.2 # Use 20% of data for testing automatically
+)
+
+# Load Training Data (80%)
+train_generator = train_datagen.flow_from_directory(
+    DIRECTORY,
+    target_size=(224, 224),
+    batch_size=BS,
+    class_mode="categorical",
+    subset="training"
+)
