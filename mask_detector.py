@@ -46,3 +46,12 @@ train_generator = train_datagen.flow_from_directory(
     class_mode="categorical",
     subset="training"
 )
+
+# Load Validation Data (20%)
+val_generator = train_datagen.flow_from_directory(
+    DIRECTORY,
+    target_size=(224, 224),
+    batch_size=BS,
+    class_mode="categorical",
+    subset="validation"
+)
