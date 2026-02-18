@@ -55,3 +55,11 @@ val_generator = train_datagen.flow_from_directory(
     class_mode="categorical",
     subset="validation"
 )
+
+# --- 3. BUILD THE MODEL (MobileNetV2) ---
+print("[INFO] Building the model...")
+
+# Load the base MobileNetV2 model (pre-trained on ImageNet)
+# include_top=False removes the head so we can add our own
+baseModel = MobileNetV2(weights="imagenet", include_top=False,
+                        input_tensor=Input(shape=(224, 224, 3)))
