@@ -71,3 +71,19 @@ headModel = Flatten(name="flatten")(headModel)
 headModel = Dense(128, activation="relu")(headModel)
 headModel = Dropout(0.5)(headModel) # Prevents overfitting
 headModel = Dense(2, activation="softmax")(headModel) # 2 outputs: Mask / No Mask
+
+
+# Place the head on top of the base model
+model = Model(inputs=baseModel.input, outputs=headModel)
+
+# Loop over all layers in the base model and freeze them
+# (We don't want to destroy the pre-trained patterns)
+for layer in baseModel.layers:
+    layer.trainable = False
+
+# --- 4. COMPILE AND TRAIN ---
+print("[INFO] Compiling model...")
+opt = Adam(learning_rate=INIT_LR)
+
+model.compile(loss="categorical_crossentropy", optimizer=opt,
+              metrics=["accuracy"])
