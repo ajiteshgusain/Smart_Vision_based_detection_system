@@ -87,3 +87,12 @@ opt = Adam(learning_rate=INIT_LR)
 
 model.compile(loss="categorical_crossentropy", optimizer=opt,
               metrics=["accuracy"])
+
+print("[INFO] Training head...")
+history = model.fit(
+    train_generator,
+    steps_per_epoch=train_generator.samples // BS,
+    validation_data=val_generator,
+    validation_steps=val_generator.samples // BS,
+    epochs=EPOCHS
+)
