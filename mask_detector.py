@@ -96,3 +96,6 @@ history = model.fit(
     validation_steps=val_generator.samples // BS,
     epochs=EPOCHS
 )
+# --- 5. SAVE THE MODEL ---
+print("[INFO] Saving mask detector model...")
+model.save("mask_detector.keras") # This is the file you will use later!
