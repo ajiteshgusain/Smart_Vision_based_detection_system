@@ -99,3 +99,10 @@ history = model.fit(
 # --- 5. SAVE THE MODEL ---
 print("[INFO] Saving mask detector model...")
 model.save("mask_detector.keras") # This is the file you will use later!
+
+
+# --- 6. PLOT RESULTS ---
+# This shows you a graph of how well the training went
+plt.style.use("ggplot")
+plt.figure()
+plt.plot(np.arange(0, EPOCHS), history.history["loss"], label="train_loss")
