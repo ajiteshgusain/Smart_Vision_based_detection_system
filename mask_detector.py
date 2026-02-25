@@ -106,3 +106,5 @@ model.save("mask_detector.keras") # This is the file you will use later!
 plt.style.use("ggplot")
 plt.figure()
 plt.plot(np.arange(0, EPOCHS), history.history["loss"], label="train_loss")
+plt.plot(np.arange(0, EPOCHS), history.history["val_loss"], label="val_loss")
+plt.plot(np.arange(0, EPOCHS), history.history["accuracy"], label="train_acc")
