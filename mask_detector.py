@@ -5,113 +5,108 @@ from tensorflow.keras.layers import AveragePooling2D, Dropout, Flatten, Dense, I
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-from tensorflow.keras.utils import to_categorical
-from sklearn.model_selection import train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from google.colab import files # For easy downloading
 
 # --- 1. SETTINGS & CONFIGURATION ---
-# Path to your dataset folder (CHANGE THIS to your actual path)
-DIRECTORY = "/content/DATASET"
-CATEGORIES = ["with_mask", "without_mask"]
+DIRECTORY = "/content/DATASET" # Ensure this matches your unzipped folder name
 
+# Check if directory exists to avoid errors
+if not os.path.exists(DIRECTORY):
+    print(f"[ERROR] Directory {DIRECTORY} not found! Please check your folder name.")
+else:
+    INIT_LR = 1e-4  
+    EPOCHS = 15     # Increased slightly; EarlyStopping will handle it if it's too much
+    BS = 32         
 
-INIT_LR = 1e-4  # Learning Rate (how fast the AI learns)
-EPOCHS = 10     # How many times to pass through the whole dataset
-BS = 32         # Batch size (process 32 images at a time)
+    print("[INFO] Loading and preprocessing images...")
 
-print("[INFO] Loading and preprocessing images...")
+    # --- 2. DATA LOADING & AUGMENTATION ---
+    train_datagen = ImageDataGenerator(
+        rotation_range=20,
+        zoom_range=0.15,
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.15,
+        horizontal_flip=True,
+        fill_mode="nearest",
+        preprocessing_function=preprocess_input, 
+        validation_split=0.2 
+    )
 
-# --- 2. DATA LOADING & AUGMENTATION ---
-# This tool loads images and creates "fake" variations (zooms, rotations)
-# to make the model smarter.
-train_datagen = ImageDataGenerator(
-    rotation_range=20,
-    zoom_range=0.15,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    shear_range=0.15,
-    horizontal_flip=True,
-    fill_mode="nearest",
-    preprocessing_function=preprocess_input, # Vital for MobileNetV2
-    validation_split=0.2 # Use 20% of data for testing automatically
-)
+    train_generator = train_datagen.flow_from_directory(
+        DIRECTORY,
+        target_size=(224, 224),
+        batch_size=BS,
+        class_mode="categorical",
+        subset="training"
+    )
 
-# Load Training Data (80%)
-train_generator = train_datagen.flow_from_directory(
-    DIRECTORY,
-    target_size=(224, 224),
-    batch_size=BS,
-    class_mode="categorical",
-    subset="training"
-)
+    val_generator = train_datagen.flow_from_directory(
+        DIRECTORY,
+        target_size=(224, 224),
+        batch_size=BS,
+        class_mode="categorical",
+        subset="validation"
+    )
 
-# Load Validation Data (20%)
-val_generator = train_datagen.flow_from_directory(
-    DIRECTORY,
-    target_size=(224, 224),
-    batch_size=BS,
-    class_mode="categorical",
-    subset="validation"
-)
+    # --- 3. BUILD THE MODEL ---
+    print("[INFO] Building the model...")
+    baseModel = MobileNetV2(weights="imagenet", include_top=False,
+                            input_tensor=Input(shape=(224, 224, 3)))
 
-# --- 3. BUILD THE MODEL (MobileNetV2) ---
-print("[INFO] Building the model...")
+    headModel = baseModel.output
+    headModel = AveragePooling2D(pool_size=(7, 7))(headModel)
+    headModel = Flatten(name="flatten")(headModel)
+    headModel = Dense(128, activation="relu")(headModel)
+    headModel = Dropout(0.5)(headModel) 
+    headModel = Dense(2, activation="softmax")(headModel) 
 
-# Load the base MobileNetV2 model (pre-trained on ImageNet)
-# include_top=False removes the head so we can add our own
-baseModel = MobileNetV2(weights="imagenet", include_top=False,
-                        input_tensor=Input(shape=(224, 224, 3)))
+    model = Model(inputs=baseModel.input, outputs=headModel)
 
-# Construct the head of the model that will be placed on top of the base model
-headModel = baseModel.output
-headModel = AveragePooling2D(pool_size=(7, 7))(headModel)
-headModel = Flatten(name="flatten")(headModel)
-headModel = Dense(128, activation="relu")(headModel)
-headModel = Dropout(0.5)(headModel) # Prevents overfitting
-headModel = Dense(2, activation="softmax")(headModel) # 2 outputs: Mask / No Mask
+    # Freeze base model layers
+    for layer in baseModel.layers:
+        layer.trainable = False
 
+    # --- 4. COMPILE AND TRAIN ---
+    print("[INFO] Compiling model...")
+    opt = Adam(learning_rate=INIT_LR)
+    model.compile(loss="categorical_crossentropy", optimizer=opt, metrics=["accuracy"])
 
-# Place the head on top of the base model
-model = Model(inputs=baseModel.input, outputs=headModel)
+    # ADDED: Early Stopping (Stops training if val_loss doesn't improve for 3 rounds)
+    early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
-# Loop over all layers in the base model and freeze them
-# (We don't want to destroy the pre-trained patterns)
-for layer in baseModel.layers:
-    layer.trainable = False
+    print("[INFO] Training head...")
+    history = model.fit(
+        train_generator,
+        steps_per_epoch=train_generator.samples // BS,
+        validation_data=val_generator,
+        validation_steps=val_generator.samples // BS,
+        epochs=EPOCHS,
+        callbacks=[early_stop]
+    )
 
-# --- 4. COMPILE AND TRAIN ---
-print("[INFO] Compiling model...")
-opt = Adam(learning_rate=INIT_LR)
+    # --- 5. SAVE AND DOWNLOAD ---
+    print("[INFO] Saving mask detector model...")
+    model.save("mask_detector.keras")
+    
+    # This will trigger a browser download automatically!
+    files.download("mask_detector.keras")
 
-model.compile(loss="categorical_crossentropy", optimizer=opt,
-              metrics=["accuracy"])
-
-print("[INFO] Training head...")
-history = model.fit(
-    train_generator,
-    steps_per_epoch=train_generator.samples // BS,
-    validation_data=val_generator,
-    validation_steps=val_generator.samples // BS,
-    epochs=EPOCHS
-)
-# --- 5. SAVE THE MODEL ---
-print("[INFO] Saving mask detector model...")
-model.save("mask_detector.keras") # This is the file you will use later!
-
-
-# --- 6. PLOT RESULTS ---
-# This shows you a graph of how well the training went
-plt.style.use("ggplot")
-plt.figure()
-plt.plot(np.arange(0, EPOCHS), history.history["loss"], label="train_loss")
-plt.plot(np.arange(0, EPOCHS), history.history["val_loss"], label="val_loss")
-plt.plot(np.arange(0, EPOCHS), history.history["accuracy"], label="train_acc")
-plt.plot(np.arange(0, EPOCHS), history.history["val_accuracy"], label="val_acc")
-plt.title("Training Loss and Accuracy")
-plt.xlabel("Epoch #")
-plt.ylabel("Loss/Accuracy")
-plt.legend(loc="lower left")
-plt.savefig("plot.png")
-print("[INFO] Done! Check plot.png to see your accuracy.")
+    # --- 6. PLOT RESULTS ---
+    N = len(history.history["loss"]) # Handle cases where early stopping kicks in
+    plt.style.use("ggplot")
+    plt.figure(figsize=(10, 5))
+    plt.plot(np.arange(0, N), history.history["loss"], label="train_loss")
+    plt.plot(np.arange(0, N), history.history["val_loss"], label="val_loss")
+    plt.plot(np.arange(0, N), history.history["accuracy"], label="train_acc")
+    plt.plot(np.arange(0, N), history.history["val_accuracy"], label="val_acc")
+    plt.title("Training Results")
+    plt.xlabel("Epoch #")
+    plt.ylabel("Loss/Accuracy")
+    plt.legend(loc="lower left")
+    plt.show()
+    print("[INFO] Process Complete.")
